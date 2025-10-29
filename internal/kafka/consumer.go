@@ -5,6 +5,7 @@ import (
 	"L0_project/internal/config"
 	"L0_project/internal/database"
 	"L0_project/internal/model"
+	"L0_project/internal/validator"
 	"context"
 	"encoding/json"
 	"github.com/segmentio/kafka-go"
@@ -60,19 +61,26 @@ func (c *Consumer) Run(ctx context.Context) {
 	}
 }
 
-// processMessage выполняет десериализацию, сохранение и кэширование заказа.
+// processMessage выполняет десериализацию, валидацию, сохранение и кэширование заказа.
 func (c *Consumer) processMessage(ctx context.Context, msg kafka.Message) error {
 	var order model.Order
 	if err := json.Unmarshal(msg.Value, &order); err != nil {
-		// Если сообщение невалидно, мы его пропускаем и коммитим, чтобы не блокировать очередь.
-		log.Printf("Невалидное сообщение, пропускаем: %v", err)
+		// Если сообщение невалидно (битый JSON), мы его пропускаем и коммитим, чтобы не блокировать очередь.
+		log.Printf("Невалидное JSON-сообщение, пропускаем: %v", err)
 		return c.reader.CommitMessages(ctx, msg)
 	}
 
-	// Здесь можно добавить дополнительную валидацию полей заказа.
+	// Валидация данных
+	if err := validator.ValidateStruct(&order); err != nil {
+		// Ошибка валидации данных (например, пустой 'name' или 'price' <= 0).
+		// Это "poison message", его не нужно ретраить. Логгируем и коммитим.
+		log.Printf("Ошибка валидации данных для UID %s, сообщение пропущено: %v", order.OrderUID, err)
+		return c.reader.CommitMessages(ctx, msg)
+	}
 
+	// Сохранение в БД
 	if err := c.storage.SaveOrder(ctx, &order); err != nil {
-		return err // Ошибка сохранения в БД, сообщение будет обработано повторно.
+		return err // Ошибка сохранения в БД (проблемы с БД), сообщение будет обработано повторно.
 	}
 	log.Printf("Заказ %s успешно сохранен в БД.", order.OrderUID)
 
