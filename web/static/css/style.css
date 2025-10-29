@@ -1,0 +1,197 @@
+:root {
+    --primary-color: #6a82fb; /* Основной цвет для акцентов */
+    --primary-hover-color: #5369d1; /* Цвет при наведении */
+    --background-color: #f0f2f5; /* Цвет фона страницы */
+    --card-background-color: #ffffff; /* Цвет фона карточек */
+    --text-color: #333; /* Основной цвет текста */
+    --muted-text-color: #6c757d; /* Приглушенный цвет для второстепенного текста */
+    --border-color: #e9ecef; /* Цвет границ и разделителей */
+    --error-color: #e53935; /* Цвет для сообщений об ошибках */
+    --font-family: 'Roboto', sans-serif; /* Основной шрифт для всего приложения */
+    --border-radius: 12px; /* Радиус скругления для всех элементов */
+    --box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08); /* Тень для карточек */
+}
+
+/* Базовые стили для всей страницы */
+body {
+    font-family: var(--font-family);
+    background-color: var(--background-color);
+    color: var(--text-color);
+    margin: 0;
+    padding: 2rem;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 100vh;
+}
+
+/* Главный контейнер приложения */
+.app-container {
+    width: 100%;
+    max-width: 850px;
+    background: transparent; /* Контейнер прозрачный, фон задается через body */
+    padding: 1rem;
+    border-radius: var(--border-radius);
+}
+
+/* Заголовок страницы */
+.app-header {
+    text-align: center;
+    margin-bottom: 2.5rem;
+}
+
+.app-header h1 {
+    margin: 0;
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--primary-color);
+}
+
+.app-header p {
+    color: var(--muted-text-color);
+    font-size: 1.2rem;
+    margin-top: 0.5rem;
+}
+
+/* Стилизация формы поиска */
+.search-form {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2.5rem;
+    position: relative; /* Необходимо для позиционирования лоадера */
+}
+
+.search-input {
+    flex-grow: 1;
+    padding: 1rem 1.25rem;
+    font-size: 1.1rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    transition: all 0.3s ease; /* Плавный переход для фокуса */
+}
+
+.search-input:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 4px rgba(106, 130, 251, 0.2); /* Подсветка при фокусе */
+}
+
+.search-button {
+    padding: 1rem 2rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #fff;
+    background-color: var(--primary-color);
+    border: none;
+    border-radius: var(--border-radius);
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.search-button:hover:not(:disabled) {
+    background-color: var(--primary-hover-color);
+}
+
+.search-button:disabled {
+    background-color: #b0bec5; /* Цвет неактивной кнопки */
+    cursor: not-allowed;
+}
+
+/* Стили для индикатора загрузки (лоадера) */
+.loader {
+    width: 28px;
+    height: 28px;
+    border: 4px solid rgba(0, 0, 0, 0.1);
+    border-left-color: var(--primary-color);
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+    position: absolute;
+    right: 180px; /* Позиционируем относительно правого края формы */
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+@keyframes rotation {
+    0% { transform: translateY(-50%) rotate(0deg); }
+    100% { transform: translateY(-50%) rotate(360deg); }
+}
+
+/* Утилитарный класс для скрытия элементов */
+.is-hidden {
+    display: none !important;
+}
+
+/* Анимация плавного появления элементов */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Контейнер для отображения деталей заказа */
+.order-details-container {
+    animation: fadeIn 0.6s ease-out;
+}
+
+/* Стили для информационных карточек (о заказе, доставке и т.д.) */
+.info-card {
+    background: var(--card-background-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    margin-bottom: 2rem;
+    padding: 2rem;
+    box-shadow: var(--box-shadow);
+}
+
+.info-card-title {
+    margin-top: 0;
+    font-size: 1.8rem;
+    color: var(--primary-color);
+    border-bottom: 2px solid var(--border-color);
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+/* Сетка для компактного отображения пар "ключ-значение" */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+}
+
+.grid-item {
+    line-height: 1.7;
+    font-size: 1.1rem;
+}
+
+.grid-item-label {
+    font-weight: 600;
+    color: #495057; /* Делаем метку чуть темнее для контраста */
+}
+
+/* Стили для карточек с товарами внутри заказа */
+.item-card {
+    border-top: 1px solid var(--border-color);
+    padding-top: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.item-card:first-child {
+    border-top: none; /* Убираем верхнюю границу у первого элемента */
+    padding-top: 0;
+    margin-top: 0;
+}
+
+/* Контейнер для вывода сообщений об ошибках */
+.error-message-container {
+    background-color: #ffcdd2;
+    color: var(--error-color);
+    border: 1px solid #ef9a9a;
+    padding: 1.5rem;
+    border-radius: var(--border-radius);
+    text-align: center;
+    font-weight: 500;
+    font-size: 1.1rem;
+    animation: fadeIn 0.6s ease-out;
+}

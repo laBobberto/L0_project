@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Отслеживание Заказов</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+
+<div class="app-container">
+    <header class="app-header">
+        <h1>Система Отслеживания Заказов</h1>
+        <p>Введите UID заказа для получения подробной информации</p>
+    </header>
+
+    <div class="search-form">
+        <input type="text" id="orderUidInput" class="search-input" placeholder="например, b563feb7b2b84b6test" autofocus>
+        <button id="searchButton" class="search-button" disabled>Найти Заказ</button>
+        <div class="loader is-hidden" id="loader"></div>
+    </div>
+
+    <div id="resultContainer" class="order-details-container is-hidden">
+    </div>
+
+    <div id="errorContainer" class="error-message-container is-hidden">
+    </div>
+</div>
+
+<script src="/static/js/script.js"></script>
+
+</body>
+</html>
