@@ -4,8 +4,8 @@ import (
 	"L0_project/internal/model"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
+	"os"
 
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
@@ -23,7 +23,7 @@ func New(dbURL, schemaPath string) (*Storage, error) {
 		return nil, fmt.Errorf("не удалось подключиться к БД: %w", err)
 	}
 
-	schema, err := ioutil.ReadFile(schemaPath)
+	schema, err := os.ReadFile(schemaPath)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось прочитать файл схемы: %w", err)
 	}
