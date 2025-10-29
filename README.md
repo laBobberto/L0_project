@@ -44,6 +44,7 @@ Backend: Go
 Frontend: HTML, CSS, JavaScript
 
 Структура проекта:
+```
 L0/
 ├── cmd/                  # Главные приложения
 │   ├── main/             # Основной сервис (HTTP-сервер и Kafka-консюмер)
@@ -61,3 +62,4 @@ L0/
 ├── docker-compose.yml    # Файл для запуска инфраструктуры (Postgres, Kafka)
 ├── go.mod                # Зависимости проекта
 └── model.json            # Шаблон данных для генерации заказов
+```
