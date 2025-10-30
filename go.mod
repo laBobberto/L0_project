@@ -1,8 +1,9 @@
 module L0_project
 
-go 1.24.9
+go 1.25.3
 
 require (
+	github.com/brianvoe/gofakeit/v6 v6.28.0
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-playground/validator/v10 v10.22.0
 	github.com/golang-migrate/migrate/v4 v4.19.0

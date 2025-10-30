@@ -1,62 +1,37 @@
 package main
 
 import (
-	"L0_project/internal/model"
+	"L0_project/internal/generator"
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/google/uuid"
-	"github.com/segmentio/kafka-go"
-	"io/ioutil"
 	"log"
-	"math/rand"
 	"time"
+
+	"github.com/segmentio/kafka-go"
 )
 
-// Producer отвечает за генерацию и отправку сообщений в Kafka.
+// Producer отвечает только за отправку сообщений в Kafka.
 type Producer struct {
-	writer    *kafka.Writer
-	baseOrder model.Order
+	writer *kafka.Writer
 }
 
 // NewProducer создает и настраивает новый экземпляр продюсера.
-func NewProducer(brokers []string, topic, modelPath string) (*Producer, error) {
+func NewProducer(brokers []string, topic string) (*Producer, error) {
 	writer := &kafka.Writer{
 		Addr:     kafka.TCP(brokers...),
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
-
-	byteValue, err := ioutil.ReadFile(modelPath)
-	if err != nil {
-		return nil, fmt.Errorf("ошибка чтения файла модели: %w", err)
-	}
-
-	var baseOrder model.Order
-	if err := json.Unmarshal(byteValue, &baseOrder); err != nil {
-		return nil, fmt.Errorf("ошибка парсинга файла модели: %w", err)
-	}
-
-	return &Producer{writer: writer, baseOrder: baseOrder}, nil
+	// Логика чтения model.json полностью удалена.
+	return &Producer{writer: writer}, nil
 }
 
-// generateOrder создает новый заказ на основе шаблона с уникальными данными.
-func (p *Producer) generateOrder() model.Order {
-	newOrder := p.baseOrder
-	newOrder.OrderUID = uuid.New().String()
-	newOrder.TrackNumber = fmt.Sprintf("WBILM%d", 1000000+rand.Intn(9000000))
-	newOrder.DateCreated = time.Now()
-	newOrder.Payment.Transaction = newOrder.OrderUID
-
-	for i := range newOrder.Items {
-		newOrder.Items[i].TrackNumber = newOrder.TrackNumber
-	}
-	return newOrder
-}
+// generateOrder() удален. Логика переехала в internal/generator
 
 // Run запускает бесконечный цикл отправки сообщений.
 func (p *Producer) Run(ctx context.Context, interval time.Duration) {
-	log.Println("Продюсер запущен. Нажмите CTRL+C для остановки.")
+	log.Println("Продюсер запущен (использует generator). Нажмите CTRL+C для остановки.")
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
@@ -66,13 +41,17 @@ func (p *Producer) Run(ctx context.Context, interval time.Duration) {
 			log.Println("Продюсер останавливается.")
 			return
 		case <-ticker.C:
-			order := p.generateOrder()
+			// 1. Получаем готовый заказ из пакета generator
+			order := generator.NewOrder()
+
+			// 2. Сериализуем его
 			orderBytes, err := json.Marshal(order)
 			if err != nil {
 				log.Printf("Ошибка сериализации заказа: %v", err)
 				continue
 			}
 
+			// 3. Отправляем в Kafka
 			err = p.writer.WriteMessages(ctx, kafka.Message{
 				Key:   []byte(order.OrderUID),
 				Value: orderBytes,
@@ -94,15 +73,16 @@ func (p *Producer) Close() {
 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
+	// rand.Seed() не нужен, gofakeit инициализируется самостоятельно.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	producer, err := NewProducer([]string{"localhost:9092"}, "orders", "./model.json")
+	// Вызов NewProducer теперь чистый, без model.json
+	producer, err := NewProducer([]string{"localhost:9092"}, "orders")
 	if err != nil {
 		log.Fatalf("Не удалось создать продюсер: %v", err)
 	}
 	defer producer.Close()
 
-	producer.Run(ctx, 2*time.Second)
+	producer.Run(ctx, 3*time.Second) // Отправляем каждые 3 секунды
 }
