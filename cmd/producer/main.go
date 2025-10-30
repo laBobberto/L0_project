@@ -27,8 +27,6 @@ func NewProducer(brokers []string, topic string) (*Producer, error) {
 	return &Producer{writer: writer}, nil
 }
 
-// generateOrder() удален. Логика переехала в internal/generator
-
 // Run запускает бесконечный цикл отправки сообщений.
 func (p *Producer) Run(ctx context.Context, interval time.Duration) {
 	log.Println("Продюсер запущен (использует generator). Нажмите CTRL+C для остановки.")
@@ -73,11 +71,9 @@ func (p *Producer) Close() {
 }
 
 func main() {
-	// rand.Seed() не нужен, gofakeit инициализируется самостоятельно.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Вызов NewProducer теперь чистый, без model.json
 	producer, err := NewProducer([]string{"localhost:9092"}, "orders")
 	if err != nil {
 		log.Fatalf("Не удалось создать продюсер: %v", err)

@@ -24,7 +24,7 @@ type Order struct {
 type Delivery struct {
 	ID      int    `json:"-" db:"id"`
 	Name    string `json:"name" db:"name" validate:"required"`
-	Phone   string `json:"phone" db:"phone" validate:"required,e164"`
+	Phone   string `json:"phone" db:"phone" validate:"required"`
 	Zip     string `json:"zip" db:"zip" validate:"required"`
 	City    string `json:"city" db:"city" validate:"required"`
 	Address string `json:"address" db:"address" validate:"required"`
@@ -36,7 +36,7 @@ type Payment struct {
 	ID           int    `json:"-" db:"id"`
 	Transaction  string `json:"transaction" db:"transaction" validate:"required"`
 	RequestID    string `json:"request_id" db:"request_id"`
-	Currency     string `json:"currency" db:"currency" validate:"required,iso4217"`
+	Currency     string `json:"currency" db:"currency" validate:"required"`
 	Provider     string `json:"provider" db:"provider" validate:"required"`
 	Amount       int    `json:"amount" db:"amount" validate:"gte=0"`
 	PaymentDt    int64  `json:"payment_dt" db:"payment_dt" validate:"required"`

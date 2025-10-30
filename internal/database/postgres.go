@@ -8,20 +8,31 @@ import (
 	"log"
 
 	"github.com/golang-migrate/migrate/v4"
-
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
 
-// Storage обеспечивает взаимодействие с базой данных.
-type Storage struct {
+//go:generate mockgen -source=postgres.go -destination=./mocks/storage_mock.go -package=mocks Storage
+
+// Storage определяет интерфейс для работы с хранилищем заказов.
+type Storage interface {
+	SaveOrder(ctx context.Context, order *model.Order) error
+	GetOrderByUID(ctx context.Context, orderUID string) (*model.Order, error)
+	GetAllOrders(ctx context.Context) ([]model.Order, error)
+	Close()
+}
+
+// postgresStorage обеспечивает взаимодействие с базой данных PostgreSQL.
+// Это конкретная реализация интерфейса Storage.
+type postgresStorage struct {
 	db *sqlx.DB
 }
 
-// New создает подключение к БД и применяет миграции.
-func New(dbURL, migrationsPath string) (*Storage, error) {
+// New создает подключение к БД, применяет миграции и возвращает
+// экземпляр, реализующий интерфейс Storage.
+func New(dbURL, migrationsPath string) (Storage, error) {
 	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось подключиться к БД: %w", err)
@@ -32,7 +43,7 @@ func New(dbURL, migrationsPath string) (*Storage, error) {
 		return nil, fmt.Errorf("ошибка применения миграций: %w", err)
 	}
 
-	return &Storage{db: db}, nil
+	return &postgresStorage{db: db}, nil
 }
 
 // runMigrations выполняет миграции БД до последней версии.
@@ -64,7 +75,7 @@ func runMigrations(dbURL, migrationsPath string) error {
 }
 
 // SaveOrder сохраняет заказ и все связанные с ним данные в одной транзакции.
-func (s *Storage) SaveOrder(ctx context.Context, order *model.Order) error {
+func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) error {
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("ошибка начала транзакции: %w", err)
@@ -99,7 +110,7 @@ func (s *Storage) SaveOrder(ctx context.Context, order *model.Order) error {
 }
 
 // GetOrderByUID извлекает полный объект заказа по его UID.
-func (s *Storage) GetOrderByUID(ctx context.Context, orderUID string) (*model.Order, error) {
+func (s *postgresStorage) GetOrderByUID(ctx context.Context, orderUID string) (*model.Order, error) {
 	var order model.Order
 	query := `
         SELECT
@@ -126,18 +137,18 @@ func (s *Storage) GetOrderByUID(ctx context.Context, orderUID string) (*model.Or
 }
 
 // GetAllOrders извлекает все заказы из БД для прогрева кэша.
-func (s *Storage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
+func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
 	// Этот запрос получает все данные одним махом, избегая проблемы N+1.
 	query := `
         SELECT
-            -- Явно перечисляем поля из 'orders', которые есть в 'model.Order'
             o.order_uid, o.track_number, o.entry, o.locale, o.internal_signature, o.customer_id, 
             o.delivery_service, o.shardkey, o.sm_id, o.date_created, o.oof_shard,
 
             d.id "delivery.id", d.name "delivery.name", d.phone "delivery.phone", d.zip "delivery.zip", d.city "delivery.city", d.address "delivery.address", d.region "delivery.region", d.email "delivery.email",
             p.id "payment.id", p.transaction "payment.transaction", p.request_id "payment.request_id", p.currency "payment.currency", p.provider "payment.provider", p.amount "payment.amount", p.payment_dt "payment.payment_dt", p.bank "payment.bank", p.delivery_cost "payment.delivery_cost", p.goods_total "payment.goods_total", p.custom_fee "payment.custom_fee",
             i.id "items.id", i.chrt_id "items.chrt_id", i.track_number "items.track_number", i.price "items.price", i.rid "items.rid", i.name "items.name", i.sale "items.sale", i.size "items.size", i.total_price "items.total_price", i.nm_id "items.nm_id", i.brand "items.brand", i.status "items.status"
-        FROM orders o
+        
+		FROM orders o
         LEFT JOIN deliveries d ON o.delivery_id = d.id
         LEFT JOIN payments p ON o.payment_id = p.id
         LEFT JOIN items i ON o.order_uid = i.order_uid
@@ -162,6 +173,7 @@ func (s *Storage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
 			order := row.Order
 			order.Delivery = row.Delivery
 			order.Payment = row.Payment
+			order.Items = []model.Item{}
 			ordersMap[order.OrderUID] = &order
 		}
 		if row.Item.ID > 0 { // Проверяем, что товар существует
@@ -178,6 +190,7 @@ func (s *Storage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
 	return orders, nil
 }
 
-func (s *Storage) Close() {
+// Close закрывает соединение с БД.
+func (s *postgresStorage) Close() {
 	s.db.Close()
 }

@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+//go:generate mockgen -source=lru.go -destination=./mocks/cache_mock.go -package=mocks Cache
+
 // Cache определяет интерфейс для кэширования.
 type Cache interface {
 	Set(key string, value interface{})
@@ -76,7 +78,7 @@ func (c *lruCache) removeOldest() {
 }
 
 // WarmUp загружает данные из БД в кэш.
-func WarmUp(ctx context.Context, storage *database.Storage, cache Cache) error {
+func WarmUp(ctx context.Context, storage database.Storage, cache Cache) error {
 	log.Println("Выполняется прогрев кэша...")
 	orders, err := storage.GetAllOrders(ctx)
 	if err != nil {
@@ -84,7 +86,7 @@ func WarmUp(ctx context.Context, storage *database.Storage, cache Cache) error {
 	}
 
 	for _, order := range orders {
-		orderCopy := order // Копируем, чтобы избежать проблем с указателями
+		orderCopy := order
 		cache.Set(order.OrderUID, &orderCopy)
 	}
 

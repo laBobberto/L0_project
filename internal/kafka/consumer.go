@@ -8,19 +8,20 @@ import (
 	"L0_project/internal/validator"
 	"context"
 	"encoding/json"
-	"github.com/segmentio/kafka-go"
 	"log"
+
+	"github.com/segmentio/kafka-go"
 )
 
 // Consumer читает и обрабатывает сообщения из Kafka.
 type Consumer struct {
 	reader  *kafka.Reader
-	storage *database.Storage
+	storage database.Storage
 	cache   cache.Cache
 }
 
 // NewConsumer создает новый экземпляр Consumer.
-func NewConsumer(cfg config.KafkaConfig, storage *database.Storage, cache cache.Cache) *Consumer {
+func NewConsumer(cfg config.KafkaConfig, storage database.Storage, cache cache.Cache) *Consumer {
 	reader := kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  cfg.Brokers,
 		GroupID:  cfg.GroupID,
@@ -34,7 +35,11 @@ func NewConsumer(cfg config.KafkaConfig, storage *database.Storage, cache cache.
 // Run запускает цикл чтения сообщений из Kafka.
 func (c *Consumer) Run(ctx context.Context) {
 	log.Println("Kafka-консюмер запущен...")
-	defer c.reader.Close()
+	defer func() {
+		if err := c.reader.Close(); err != nil {
+			log.Printf("Ошибка закрытия Kafka-ридера: %v", err)
+		}
+	}()
 
 	for {
 		select {
@@ -50,9 +55,7 @@ func (c *Consumer) Run(ctx context.Context) {
 
 			if err := c.processMessage(ctx, msg); err != nil {
 				log.Printf("Ошибка обработки сообщения (UID: %s): %v", string(msg.Key), err)
-				// Сообщение не будет закоммичено и будет обработано повторно.
 			} else {
-				// Сообщение успешно обработано, коммитим его.
 				if err := c.reader.CommitMessages(ctx, msg); err != nil {
 					log.Printf("Ошибка коммита сообщения: %v", err)
 				}
@@ -65,17 +68,14 @@ func (c *Consumer) Run(ctx context.Context) {
 func (c *Consumer) processMessage(ctx context.Context, msg kafka.Message) error {
 	var order model.Order
 	if err := json.Unmarshal(msg.Value, &order); err != nil {
-		// Если сообщение невалидно (битый JSON), мы его пропускаем и коммитим, чтобы не блокировать очередь.
 		log.Printf("Невалидное JSON-сообщение, пропускаем: %v", err)
-		return c.reader.CommitMessages(ctx, msg)
+		return nil
 	}
 
 	// Валидация данных
 	if err := validator.ValidateStruct(&order); err != nil {
-		// Ошибка валидации данных (например, пустой 'name' или 'price' <= 0).
-		// Это "poison message", его не нужно ретраить. Логгируем и коммитим.
 		log.Printf("Ошибка валидации данных для UID %s, сообщение пропущено: %v", order.OrderUID, err)
-		return c.reader.CommitMessages(ctx, msg)
+		return nil
 	}
 
 	// Сохранение в БД
@@ -84,7 +84,9 @@ func (c *Consumer) processMessage(ctx context.Context, msg kafka.Message) error 
 	}
 	log.Printf("Заказ %s успешно сохранен в БД.", order.OrderUID)
 
-	c.cache.Set(order.OrderUID, &order)
+	// Кэшируем указатель на копию
+	orderCopy := order
+	c.cache.Set(order.OrderUID, &orderCopy)
 	log.Printf("Заказ %s успешно сохранен в кэш.", order.OrderUID)
 
 	return nil

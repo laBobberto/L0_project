@@ -4,19 +4,20 @@ import (
 	"L0_project/internal/cache"
 	"L0_project/internal/database"
 	"encoding/json"
-	"github.com/go-chi/chi/v5"
 	"log"
 	"net/http"
+
+	"github.com/go-chi/chi/v5"
 )
 
 // OrderHandler обрабатывает HTTP-запросы, связанные с заказами.
 type OrderHandler struct {
-	storage *database.Storage
-	cache   cache.Cache
+	storage database.Storage // Используем интерфейс
+	cache   cache.Cache      // Используем интерфейс
 }
 
 // NewOrderHandler создает новый экземпляр OrderHandler.
-func NewOrderHandler(storage *database.Storage, cache cache.Cache) *OrderHandler {
+func NewOrderHandler(storage database.Storage, cache cache.Cache) *OrderHandler {
 	return &OrderHandler{storage: storage, cache: cache}
 }
 

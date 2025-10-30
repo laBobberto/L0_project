@@ -4,21 +4,22 @@ import (
 	"L0_project/internal/cache"
 	"L0_project/internal/database"
 	"fmt"
+	"net/http"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"net/http"
 )
 
 // Server представляет HTTP-сервер.
 type Server struct {
 	port    string
 	router  *chi.Mux
-	storage *database.Storage
+	storage database.Storage
 	cache   cache.Cache
 }
 
 // NewServer создает и настраивает новый экземпляр сервера.
-func NewServer(port string, storage *database.Storage, cache cache.Cache) *Server {
+func NewServer(port string, storage database.Storage, cache cache.Cache) *Server {
 	server := &Server{
 		port:    port,
 		storage: storage,
