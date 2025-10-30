@@ -42,6 +42,10 @@ func (c *lruCache) Set(key string, value interface{}) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	if c.capacity <= 0 {
+		return
+	}
+
 	if element, exists := c.items[key]; exists {
 		c.queue.MoveToFront(element)
 		element.Value.(*cacheItem).value = value

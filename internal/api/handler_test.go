@@ -4,6 +4,7 @@ import (
 	"L0_project/internal/cache/mocks"
 	db_mocks "L0_project/internal/database/mocks"
 	"L0_project/internal/model"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -39,10 +40,12 @@ func setupHandlerAndMocks(t *testing.T) (*gomock.Controller, *OrderHandler, *moc
 // createTestRequest - хелпер для создания HTTP-запроса с URL-параметром
 func createTestRequest(t *testing.T, uid string) *http.Request {
 	req := httptest.NewRequest("GET", "/api/order/"+uid, nil)
+
 	// Контекст chi для URL-параметров
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("orderUID", uid)
-	req = req.WithContext(chi.WithRouteContext(req.Context(), chiCtx))
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chiCtx))
+
 	return req
 }
 
