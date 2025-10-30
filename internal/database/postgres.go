@@ -3,10 +3,14 @@ package database
 import (
 	"L0_project/internal/model"
 	"context"
+	"errors"
 	"fmt"
 	"log"
-	"os"
 
+	"github.com/golang-migrate/migrate/v4"
+
+	_ "github.com/golang-migrate/migrate/v4/database/postgres"
+	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 )
@@ -17,23 +21,46 @@ type Storage struct {
 }
 
 // New создает подключение к БД и применяет миграции.
-func New(dbURL, schemaPath string) (*Storage, error) {
+func New(dbURL, migrationsPath string) (*Storage, error) {
 	db, err := sqlx.Connect("postgres", dbURL)
 	if err != nil {
 		return nil, fmt.Errorf("не удалось подключиться к БД: %w", err)
 	}
 
-	schema, err := os.ReadFile(schemaPath)
-	if err != nil {
-		return nil, fmt.Errorf("не удалось прочитать файл схемы: %w", err)
+	// Запуск миграций
+	if err := runMigrations(dbURL, migrationsPath); err != nil {
+		return nil, fmt.Errorf("ошибка применения миграций: %w", err)
 	}
-
-	if _, err := db.Exec(string(schema)); err != nil {
-		return nil, fmt.Errorf("не удалось применить миграции: %w", err)
-	}
-	log.Println("Миграции успешно применены.")
 
 	return &Storage{db: db}, nil
+}
+
+// runMigrations выполняет миграции БД до последней версии.
+func runMigrations(dbURL, migrationsPath string) error {
+	log.Println("Поиск и применение миграций...")
+
+	// Важно: 'file://' префикс
+	m, err := migrate.New(fmt.Sprintf("file://%s", migrationsPath), dbURL)
+	if err != nil {
+		return fmt.Errorf("не удалось создать экземпляр миграции: %w", err)
+	}
+
+	// Применяем миграции "вверх"
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("не удалось выполнить миграции: %w", err)
+	}
+
+	version, dirty, err := m.Version()
+	if err != nil {
+		return fmt.Errorf("не удалось получить версию миграции: %w", err)
+	}
+
+	if dirty {
+		log.Printf("БД в 'грязном' состоянии (dirty). Версия: %d. Рекомендуется проверка.", version)
+	}
+
+	log.Printf("Миграции успешно применены. Текущая версия БД: %d", version)
+	return nil
 }
 
 // SaveOrder сохраняет заказ и все связанные с ним данные в одной транзакции.
@@ -103,7 +130,10 @@ func (s *Storage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
 	// Этот запрос получает все данные одним махом, избегая проблемы N+1.
 	query := `
         SELECT
-            o.*,
+            -- Явно перечисляем поля из 'orders', которые есть в 'model.Order'
+            o.order_uid, o.track_number, o.entry, o.locale, o.internal_signature, o.customer_id, 
+            o.delivery_service, o.shardkey, o.sm_id, o.date_created, o.oof_shard,
+
             d.id "delivery.id", d.name "delivery.name", d.phone "delivery.phone", d.zip "delivery.zip", d.city "delivery.city", d.address "delivery.address", d.region "delivery.region", d.email "delivery.email",
             p.id "payment.id", p.transaction "payment.transaction", p.request_id "payment.request_id", p.currency "payment.currency", p.provider "payment.provider", p.amount "payment.amount", p.payment_dt "payment.payment_dt", p.bank "payment.bank", p.delivery_cost "payment.delivery_cost", p.goods_total "payment.goods_total", p.custom_fee "payment.custom_fee",
             i.id "items.id", i.chrt_id "items.chrt_id", i.track_number "items.track_number", i.price "items.price", i.rid "items.rid", i.name "items.name", i.sale "items.sale", i.size "items.size", i.total_price "items.total_price", i.nm_id "items.nm_id", i.brand "items.brand", i.status "items.status"

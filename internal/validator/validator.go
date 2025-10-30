@@ -1,12 +1,8 @@
 package validator
 
-import "sync"
-
-package validator
-
 import (
-"github.com/go-playground/validator/v10"
-"sync"
+	"github.com/go-playground/validator/v10"
+	"sync"
 )
 
 var (

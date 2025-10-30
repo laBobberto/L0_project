@@ -3,11 +3,13 @@ package model
 import "time"
 
 type Order struct {
-	OrderUID          string    `json:"order_uid" db:"order_uid" validate:"required,uuid4"`
-	TrackNumber       string    `json:"track_number" db:"track_number" validate:"required"`
-	Entry             string    `json:"entry" db:"entry" validate:"required"`
-	Delivery          Delivery  `json:"delivery" db:"delivery" validate:"required,dive"`
-	Payment           Payment   `json:"payment" db:"payment" validate:"required,dive"`
+	OrderUID    string `json:"order_uid" db:"order_uid" validate:"required,uuid4"`
+	TrackNumber string `json:"track_number" db:"track_number" validate:"required"`
+	Entry       string `json:"entry" db:"entry" validate:"required"`
+
+	Delivery Delivery `json:"delivery" db:"delivery" validate:""`
+	Payment  Payment  `json:"payment" db:"payment" validate:""`
+
 	Items             []Item    `json:"items" db:"items" validate:"required,min=1,dive"`
 	Locale            string    `json:"locale" db:"locale" validate:"required,len=2"`
 	InternalSignature string    `json:"internal_signature" db:"internal_signature"`

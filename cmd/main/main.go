@@ -17,7 +17,8 @@ func main() {
 	cfg := config.Get()
 
 	// Инициализация хранилища
-	storage, err := database.New(cfg.Postgres.URL, "./internal/database/schema.sql")
+	// Путь изменен на папку с миграциями
+	storage, err := database.New(cfg.Postgres.URL, "./internal/database/migrations")
 	if err != nil {
 		log.Fatalf("Ошибка инициализации хранилища: %v", err)
 	}
