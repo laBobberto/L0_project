@@ -8,6 +8,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 // Server представляет HTTP-сервер.
@@ -42,9 +44,15 @@ func (s *Server) setupRouter() *chi.Mux {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
+	// Middleware для OpenTelemetry
+	router.Use(otelhttp.NewMiddleware("l0-http-server"))
+
 	// Обработчик API
 	orderHandler := NewOrderHandler(s.storage, s.cache)
 	router.Get("/api/order/{orderUID}", orderHandler.GetByUID)
+
+	// Эндпоинт для сбора метрик Prometheus
+	router.Handle("/metrics", promhttp.Handler())
 
 	// Обработчик для статических файлов
 	fileServer := http.FileServer(http.Dir("./web/"))

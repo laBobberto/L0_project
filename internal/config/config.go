@@ -1,16 +1,19 @@
 package config
 
 import (
-	"github.com/ilyakaznacheev/cleanenv"
 	"log"
 	"sync"
+
+	"github.com/ilyakaznacheev/cleanenv"
+	"github.com/joho/godotenv"
 )
 
 // KafkaConfig содержит настройки для подключения к Kafka.
 type KafkaConfig struct {
-	Brokers []string `env:"KAFKA_BROKERS" env-default:"localhost:9092"`
-	Topic   string   `env:"KAFKA_TOPIC" env-default:"orders"`
-	GroupID string   `env:"KAFKA_GROUP_ID" env-default:"orders-group"`
+	Brokers  []string `env:"KAFKA_BROKERS" env-default:"localhost:9092"`
+	Topic    string   `env:"KAFKA_TOPIC" env-default:"orders"`
+	DLQTopic string   `env:"KAFKA_DLQ_TOPIC" env-default:"orders_dlq"` // Топик для "битых" сообщений
+	GroupID  string   `env:"KAFKA_GROUP_ID" env-default:"orders-group"`
 }
 
 // Config содержит всю конфигурацию приложения.
@@ -35,6 +38,9 @@ var (
 // Get возвращает синглтон-экземпляр конфигурации.
 func Get() *Config {
 	once.Do(func() {
+		if err := godotenv.Load(); err != nil {
+			log.Println("Предупреждение: не удалось загрузить файл .env. Используются только переменные окружения.")
+		}
 		if err := cleanenv.ReadEnv(&cfg); err != nil {
 			log.Fatalf("Не удалось прочитать переменные окружения: %v", err)
 		}

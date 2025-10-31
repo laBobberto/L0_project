@@ -1,0 +1,32 @@
+run:
+  timeout: 5m
+  skip-dirs:
+    - internal/database/mocks
+    - internal/cache/mocks
+
+linters-settings:
+  gofmt:
+    rewrite-rules:
+      - pattern: 'github.com/golang/protobuf/proto'
+        replacement: 'google.golang.org/protobuf/proto'
+  govet:
+    check-shadowing: true
+
+linters:
+  disable-all: true
+  enable:
+    - gofmt
+    - goimports
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - typecheck
+    - ineffassign
+    - bodyclose
+    - stylecheck
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      text: "errcheck: Error return value is not checked"

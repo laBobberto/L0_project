@@ -1,6 +1,7 @@
 package main
 
 import (
+	"L0_project/internal/config"
 	"L0_project/internal/generator"
 	"context"
 	"encoding/json"
@@ -23,7 +24,6 @@ func NewProducer(brokers []string, topic string) (*Producer, error) {
 		Topic:    topic,
 		Balancer: &kafka.LeastBytes{},
 	}
-	// Логика чтения model.json полностью удалена.
 	return &Producer{writer: writer}, nil
 }
 
@@ -71,10 +71,14 @@ func (p *Producer) Close() {
 }
 
 func main() {
+	// Получаем конфигурацию из .env файла
+	cfg := config.Get()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	producer, err := NewProducer([]string{"localhost:9092"}, "orders")
+	// Используем переменные из конфига
+	producer, err := NewProducer(cfg.Kafka.Brokers, cfg.Kafka.Topic)
 	if err != nil {
 		log.Fatalf("Не удалось создать продюсер: %v", err)
 	}

@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.0.1
@@ -18,23 +16,75 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://127.0.0.1:9092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_CREATE_TOPICS: "orders:1:1" # Автоматически создает топик 'orders'
+      KAFKA_CREATE_TOPICS: "orders:1:1,orders_dlq:1:1"
 
   postgres:
     image: postgres:14-alpine
     container_name: postgres-db
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     environment:
-      POSTGRES_USER: user        # Имя пользователя
-      POSTGRES_PASSWORD: password  # Пароль
-      POSTGRES_DB: orders_db     # Имя базы данных
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  l0-app:
+    build: .
+    container_name: l0-app
+    ports:
+      - "8081:8081" # Пробрасываем порт HTTP-сервера
+    environment:
+      - POSTGRES_URL=postgres://user:password@postgres:5432/orders_db?sslmode=disable
+      - KAFKA_BROKERS=kafka:29092
+      - HTTP_PORT=8081
+      - KAFKA_TOPIC=orders
+      - KAFKA_GROUP_ID=orders-group
+      - KAFKA_DLQ_TOPIC=orders_dlq
+      - CACHE_SIZE=100
+
+    depends_on:
+      - postgres # Запускаемся после Postgres
+      - kafka    # Запускаемся после Kafka
+      - jaeger
+      - prometheus
+
+  prometheus:
+    image: prom/prometheus:v2.45.0
+    container_name: prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:z
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  grafana:
+    image: grafana/grafana:9.5.1
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+  jaeger:
+    image: jaegertracing/all-in-one:1.58
+    container_name: jaeger
+    ports:
+      - "16686:16686" # Веб-интерфейс Jaeger
+      - "14268:14268" # Прием трейсов (HTTP)
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
 volumes:
   postgres_data:
+  prometheus_data:
+  grafana_data:

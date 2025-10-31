@@ -1,6 +1,7 @@
 package database
 
 import (
+	"L0_project/internal/metrics" // Для сбора метрик
 	"L0_project/internal/model"
 	"context"
 	"errors"
@@ -12,6 +13,8 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"go.opentelemetry.io/otel" // Для трассировки
+	"go.opentelemetry.io/otel/trace"
 )
 
 //go:generate mockgen -source=postgres.go -destination=./mocks/storage_mock.go -package=mocks Storage
@@ -27,7 +30,8 @@ type Storage interface {
 // postgresStorage обеспечивает взаимодействие с базой данных PostgreSQL.
 // Это конкретная реализация интерфейса Storage.
 type postgresStorage struct {
-	db *sqlx.DB
+	db     *sqlx.DB
+	tracer trace.Tracer // Для трассировки
 }
 
 // New создает подключение к БД, применяет миграции и возвращает
@@ -43,7 +47,10 @@ func New(dbURL, migrationsPath string) (Storage, error) {
 		return nil, fmt.Errorf("ошибка применения миграций: %w", err)
 	}
 
-	return &postgresStorage{db: db}, nil
+	return &postgresStorage{
+		db:     db,
+		tracer: otel.Tracer("postgres-storage"), // Инициализация трейсера
+	}, nil
 }
 
 // runMigrations выполняет миграции БД до последней версии.
@@ -76,11 +83,15 @@ func runMigrations(dbURL, migrationsPath string) error {
 
 // SaveOrder сохраняет заказ и все связанные с ним данные в одной транзакции.
 func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) error {
+	// Создаем span для трассировки
+	ctx, span := s.tracer.Start(ctx, "DB.SaveOrder")
+	defer span.End()
+
 	tx, err := s.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("ошибка начала транзакции: %w", err)
 	}
-	defer tx.Rollback()
+	defer tx.Rollback() // Безопасный Rollback, если Commit не был вызван
 
 	deliveryQuery := `INSERT INTO deliveries (name, phone, zip, city, address, region, email) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 	var deliveryID int
@@ -111,6 +122,10 @@ func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) err
 
 // GetOrderByUID извлекает полный объект заказа по его UID.
 func (s *postgresStorage) GetOrderByUID(ctx context.Context, orderUID string) (*model.Order, error) {
+	// Создаем span для трассировки
+	ctx, span := s.tracer.Start(ctx, "DB.GetOrderByUID")
+	defer span.End()
+
 	var order model.Order
 	query := `
         SELECT
@@ -125,11 +140,14 @@ func (s *postgresStorage) GetOrderByUID(ctx context.Context, orderUID string) (*
         JOIN deliveries d ON o.delivery_id = d.id
         JOIN payments p ON o.payment_id = p.id
         WHERE o.order_uid = $1`
+
 	if err := s.db.GetContext(ctx, &order, query, orderUID); err != nil {
+		metrics.DBErrors.WithLabelValues("get_order").Inc() // Метрика ошибки
 		return nil, fmt.Errorf("не удалось получить заказ: %w", err)
 	}
 
 	if err := s.db.SelectContext(ctx, &order.Items, `SELECT * FROM items WHERE order_uid = $1`, orderUID); err != nil {
+		metrics.DBErrors.WithLabelValues("get_items").Inc() // Метрика ошибки
 		return nil, fmt.Errorf("не удалось получить товары для заказа: %w", err)
 	}
 
@@ -138,6 +156,10 @@ func (s *postgresStorage) GetOrderByUID(ctx context.Context, orderUID string) (*
 
 // GetAllOrders извлекает все заказы из БД для прогрева кэша.
 func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, error) {
+	// Создаем span для трассировки
+	ctx, span := s.tracer.Start(ctx, "DB.GetAllOrders")
+	defer span.End()
+
 	// Этот запрос получает все данные одним махом, избегая проблемы N+1.
 	query := `
         SELECT
@@ -163,6 +185,7 @@ func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, erro
 
 	var rows []fullOrderRow
 	if err := s.db.SelectContext(ctx, &rows, query); err != nil {
+		metrics.DBErrors.WithLabelValues("get_all_orders").Inc() // Метрика ошибки
 		return nil, fmt.Errorf("ошибка получения всех заказов: %w", err)
 	}
 

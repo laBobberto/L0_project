@@ -6,6 +6,7 @@ import (
 	"L0_project/internal/config"
 	"L0_project/internal/database"
 	"L0_project/internal/kafka"
+	"L0_project/internal/metrics"
 	"context"
 	"log"
 	"os"
@@ -15,6 +16,9 @@ import (
 
 func main() {
 	cfg := config.Get()
+
+	// Инициализация метрик (Prometheus)
+	metrics.Init()
 
 	// Инициализация хранилища
 	// Путь изменен на папку с миграциями
@@ -26,6 +30,7 @@ func main() {
 
 	// Инициализация кэша
 	orderCache := cache.NewLRUCache(cfg.Cache.Size)
+	// Используем Background-контекст для прогрева, т.к. он должен завершиться до старта
 	if err := cache.WarmUp(context.Background(), storage, orderCache); err != nil {
 		log.Printf("Ошибка при прогреве кэша: %v", err)
 	}
@@ -49,6 +54,6 @@ func main() {
 	<-shutdown
 
 	log.Println("Сервис останавливается...")
-	cancel()
+	cancel() // Отправляем сигнал отмены во все компоненты (Kafka)
 	log.Println("Сервис успешно остановлен.")
 }
