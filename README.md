@@ -74,7 +74,7 @@ http://localhost:16686
 **Prometheus (Метрики)**:  
 http://localhost:9090
 
-Здесь можно посмотреть сырые метрики, которые собирает сервис (например, `http_requests_total`, `cache_hits_total`, `db_errors_total`).
+Здесь можно посмотреть сырые метрики, которые собирает сервис (например, `http_requests_total`, `cache_hits_total`, `db_errors_total`). Лучше смотреть через дэшборд в Grafana
 
 **Grafana (Дэшборды)**:  
 http://localhost:3000
@@ -110,4 +110,5 @@ L0/
 ├── go.sum 
 ├── model.json # Шаблон данных (для генератора и тестов)
 └── prometheus.yml # Конфигурация Prometheus
+
 ```
