@@ -24,7 +24,10 @@ require (
 	go.uber.org/mock v0.4.0
 )
 
-require go.opentelemetry.io/otel/exporters/jaeger v1.17.0
+require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
+	go.opentelemetry.io/otel/exporters/jaeger v1.17.0
+)
 
 require (
 	github.com/BurntSushi/toml v1.5.0 // indirect

@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/segmentio/kafka-go"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
@@ -17,10 +19,10 @@ import (
 
 type NoOpReader struct{}
 
-func (r *NoOpReader) FetchMessage(ctx context.Context) (kafka.Message, error) {
+func (r *NoOpReader) FetchMessage(context.Context) (kafka.Message, error) {
 	return kafka.Message{}, nil
 }
-func (r *NoOpReader) CommitMessages(ctx context.Context, msgs ...kafka.Message) error {
+func (r *NoOpReader) CommitMessages(context.Context, ...kafka.Message) error {
 	return nil
 }
 func (r *NoOpReader) Close() error { return nil }
@@ -33,9 +35,12 @@ func setupConsumerAndMocks(t *testing.T) (*gomock.Controller, *Consumer, *mocks.
 
 	// Используем NoOpReader
 	consumer := &Consumer{
-		reader:  &NoOpReader{},
-		storage: mockStorage,
-		cache:   mockCache,
+		reader:     &NoOpReader{},
+		storage:    mockStorage,
+		cache:      mockCache,
+		dlqWriter:  &kafka.Writer{}, // Инициализируем, чтобы избежать nil panic в тестах на DLQ
+		maxRetries: 3,               // Устанавливаем значение, как в NewConsumer
+		tracer:     otel.Tracer("test-tracer"),
 	}
 
 	return ctrl, consumer, mockCache, mockStorage
@@ -43,7 +48,7 @@ func setupConsumerAndMocks(t *testing.T) (*gomock.Controller, *Consumer, *mocks.
 
 // helperTestOrder - валидный заказ для тестов
 var helperTestOrder = model.Order{
-	OrderUID:    "b563feb7b2b84b6test",
+	OrderUID:    "b563feb7-b2b8-4b6f-807c-9b63a11e81b9",
 	TrackNumber: "WBILMTESTTRACK",
 	Entry:       "WBIL",
 	Delivery: model.Delivery{
@@ -56,7 +61,7 @@ var helperTestOrder = model.Order{
 		Email:   "test@gmail.com",
 	},
 	Payment: model.Payment{
-		Transaction:  "b563feb7b2b84b6test",
+		Transaction:  "b563feb7-b2b8-4b6f-807c-9b63a11e81b9",
 		Currency:     "USD",
 		Provider:     "wbpay",
 		Amount:       1817,
@@ -115,20 +120,10 @@ func TestConsumer_ProcessMessage_DBError(t *testing.T) {
 	msg := kafka.Message{Value: orderBytes}
 	dbErr := errors.New("database connection failed")
 
-	// 1. Ожидаем сохранение в БД, которое вернет ошибку
-	// maxRetries (3) + 1 (первая попытка) = 0. По дефолту 3.
-	// В тесте maxRetries = 0, поэтому 1 вызов.
-	// Обновим тест, чтобы он соответствовал новой логике ретраев
 	consumer.maxRetries = 3
 
 	mockStorage.EXPECT().SaveOrder(gomock.Any(), gomock.Any()).Return(dbErr).Times(consumer.maxRetries)
-
-	// 2. Не ожидаем сохранения в кэш
 	mockCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
-
-	// Ожидаем запись в DLQ (т.к. ретраи не помогли)
-	// Для этого нужен мок dlqWriter
-	// ... (Просто проверим, что ошибка не возвращается, т.к. уходит в DLQ)
 
 	err := consumer.processMessage(context.Background(), msg)
 

@@ -17,10 +17,17 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// KafkaMessageReader определяет методы, необходимые для Consumer
+type KafkaMessageReader interface {
+	FetchMessage(ctx context.Context) (kafka.Message, error)
+	CommitMessages(ctx context.Context, msgs ...kafka.Message) error
+	Close() error
+}
+
 // Consumer читает и обрабатывает сообщения из Kafka.
 type Consumer struct {
-	reader     *kafka.Reader
-	dlqWriter  *kafka.Writer // Продюсер для отправки "битых" сообщений в DLQ
+	reader     KafkaMessageReader // Используем интерфейс
+	dlqWriter  *kafka.Writer      // Продюсер для отправки "битых" сообщений в DLQ
 	storage    database.Storage
 	cache      cache.Cache
 	tracer     trace.Tracer // Для трассировки
@@ -46,7 +53,7 @@ func NewConsumer(cfg config.KafkaConfig, storage database.Storage, cache cache.C
 	}
 
 	return &Consumer{
-		reader:     reader,
+		reader:     reader, // *kafka.Reader реализует интерфейс KafkaMessageReader
 		dlqWriter:  dlqWriter,
 		storage:    storage,
 		cache:      cache,

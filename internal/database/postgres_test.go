@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	sqlmock "github.com/DATA-DOG/go-sqlmock"
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel"
@@ -74,22 +75,18 @@ func TestPostgresStorage_SaveOrder_Success(t *testing.T) {
 
 	mock.ExpectBegin()
 
-	// 1. Delivery Insert
 	mock.ExpectQuery(`INSERT INTO deliveries`).
 		WithArgs(order.Delivery.Name, order.Delivery.Phone, order.Delivery.Zip, order.Delivery.City, order.Delivery.Address, order.Delivery.Region, order.Delivery.Email).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 
-	// 2. Payment Insert
 	mock.ExpectQuery(`INSERT INTO payments`).
 		WithArgs(order.Payment.Transaction, order.Payment.RequestID, order.Payment.Currency, order.Payment.Provider, order.Payment.Amount, order.Payment.PaymentDt, order.Payment.Bank, order.Payment.DeliveryCost, order.Payment.GoodsTotal, order.Payment.CustomFee).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(1))
 
-	// 3. Order Insert
 	mock.ExpectExec(`INSERT INTO orders`).
 		WithArgs(order.OrderUID, order.TrackNumber, order.Entry, 1, 1, order.Locale, order.InternalSignature, order.CustomerID, order.DeliveryService, order.Shardkey, order.SmID, order.DateCreated, order.OofShard).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
-	// 4. Item Insert
 	item := order.Items[0]
 	mock.ExpectExec(`INSERT INTO items`).
 		WithArgs(order.OrderUID, item.ChrtID, item.TrackNumber, item.Price, item.Rid, item.Name, item.Sale, item.Size, item.TotalPrice, item.NmID, item.Brand, item.Status).
@@ -97,7 +94,7 @@ func TestPostgresStorage_SaveOrder_Success(t *testing.T) {
 
 	mock.ExpectCommit()
 
-	err := storage.SaveOrder(ctx, &order)
+	err := storage.SaveOrder(ctx, order)
 	assert.NoError(t, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
 }
@@ -109,7 +106,7 @@ func TestPostgresStorage_SaveOrder_BeginError(t *testing.T) {
 
 	mock.ExpectBegin().WillReturnError(mockErr)
 
-	err := storage.SaveOrder(ctx, &helperTestOrder)
+	err := storage.SaveOrder(ctx, helperTestOrder)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ошибка начала транзакции")
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -122,9 +119,9 @@ func TestPostgresStorage_SaveOrder_DeliveryError_Rollback(t *testing.T) {
 
 	mock.ExpectBegin()
 	mock.ExpectQuery(`INSERT INTO deliveries`).WillReturnError(mockErr)
-	mock.ExpectRollback() // Ожидаем откат
+	mock.ExpectRollback()
 
-	err := storage.SaveOrder(ctx, &helperTestOrder)
+	err := storage.SaveOrder(ctx, helperTestOrder)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "ошибка сохранения доставки")
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -143,9 +140,7 @@ func TestPostgresStorage_SaveOrder_CommitError(t *testing.T) {
 	mock.ExpectExec(`INSERT INTO items`).WillReturnResult(sqlmock.NewResult(1, 1))
 
 	mock.ExpectCommit().WillReturnError(mockErr)
-	mock.ExpectRollback() // Ожидаем откат (т.к. defer func() сработает на ошибку)
-
-	err := storage.SaveOrder(ctx, &order)
+	err := storage.SaveOrder(ctx, order)
 	assert.Error(t, err)
 	assert.Equal(t, mockErr, err)
 	assert.NoError(t, mock.ExpectationsWereMet())
@@ -201,9 +196,6 @@ func TestPostgresStorage_GetOrderByUID_OrderNotFound(t *testing.T) {
 	mock.ExpectQuery(`SELECT o.order_uid, o.track_number, o.entry`).
 		WithArgs(uid).
 		WillReturnError(mockErr)
-
-	// Запрос товаров не должен быть вызван
-	mock.ExpectQuery(`SELECT \* FROM items WHERE order_uid`).Times(0)
 
 	resultOrder, err := storage.GetOrderByUID(ctx, uid)
 	assert.Error(t, err)

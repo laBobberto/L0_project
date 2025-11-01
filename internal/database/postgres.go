@@ -88,7 +88,9 @@ func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) (er
 	ctx, span := s.tracer.Start(ctx, "DB.SaveOrder")
 	defer span.End()
 
-	tx, err := s.db.BeginTxx(ctx, nil)
+	var tx *sqlx.Tx
+	tx, err = s.db.BeginTxx(ctx, nil)
+
 	if err != nil {
 		return fmt.Errorf("ошибка начала транзакции: %w", err)
 	}
@@ -186,8 +188,10 @@ func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, erro
 
             d.id "delivery.id", d.name "delivery.name", d.phone "delivery.phone", d.zip "delivery.zip", d.city "delivery.city", d.address "delivery.address", d.region "delivery.region", d.email "delivery.email",
             p.id "payment.id", p.transaction "payment.transaction", p.request_id "payment.request_id", p.currency "payment.currency", p.provider "payment.provider", p.amount "payment.amount", p.payment_dt "payment.payment_dt", p.bank "payment.bank", p.delivery_cost "payment.delivery_cost", p.goods_total "payment.goods_total", p.custom_fee "payment.custom_fee",
-            i.id "items.id", i.chrt_id "items.chrt_id", i.track_number "items.track_number", i.price "items.price", i.rid "items.rid", i.name "items.name", i.sale "items.sale", i.size "items.size", i.total_price "items.total_price", i.nm_id "items.nm_id", i.brand "items.brand", i.status "items.status"
-        
+            i.id "items.id", i.chrt_id "items.chrt_id", i.track_number "items.track_number", i.price "items.price", i.rid "items.rid", i.name "items.name", i.sale "items.sale", i.size "items.size", i.total_price "items.total_price", i.nm_id "items.nm_id", i.brand "items.brand", i.status "items.status",
+            
+            i.order_uid "items.order_uid"
+
 		FROM orders o
         LEFT JOIN deliveries d ON o.delivery_id = d.id
         LEFT JOIN payments p ON o.payment_id = p.id
@@ -210,6 +214,7 @@ func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, erro
 	// Группируем товары по заказам.
 	ordersMap := make(map[string]*model.Order)
 	for _, row := range rows {
+		// Используем row.Order.OrderUID, чтобы явно указать поле из model.Order
 		if _, exists := ordersMap[row.Order.OrderUID]; !exists {
 			order := row.Order
 			order.Delivery = row.Delivery

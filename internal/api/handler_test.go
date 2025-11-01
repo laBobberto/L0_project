@@ -38,9 +38,8 @@ func setupHandlerAndMocks(t *testing.T) (*gomock.Controller, *OrderHandler, *moc
 }
 
 // createTestRequest - хелпер для создания HTTP-запроса с URL-параметром
-func createTestRequest(t *testing.T, uid string) *http.Request {
+func createTestRequest(_ *testing.T, uid string) *http.Request {
 	req := httptest.NewRequest("GET", "/api/order/"+uid, nil)
-
 	// Контекст chi для URL-параметров
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add("orderUID", uid)
