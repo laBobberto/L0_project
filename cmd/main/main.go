@@ -7,6 +7,7 @@ import (
 	"L0_project/internal/database"
 	"L0_project/internal/kafka"
 	"L0_project/internal/metrics"
+	"L0_project/internal/tracing"
 	"context"
 	"log"
 	"os"
@@ -15,6 +16,8 @@ import (
 )
 
 func main() {
+	shutdownTracer := tracing.InitTracerProvider("l0-app")
+	defer shutdownTracer()
 	cfg := config.Get()
 
 	// Инициализация метрик (Prometheus)

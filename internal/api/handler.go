@@ -27,18 +27,17 @@ func NewOrderHandler(storage database.Storage, cache cache.Cache) *OrderHandler 
 // GetByUID ищет заказ по UID сначала в кэше, затем в БД.
 func (h *OrderHandler) GetByUID(w http.ResponseWriter, r *http.Request) {
 	// Метрики и трассировка
-	handlerName := "GetByUID"
+	const handlerName = "GetByUID"
 	timer := prometheus.NewTimer(metrics.HttpRequestDuration.WithLabelValues(handlerName))
 	defer timer.ObserveDuration() // Замеряем длительность запроса
 
 	orderUID := chi.URLParam(r, "orderUID")
 	if orderUID == "" {
-		metrics.HttpRequestsTotal.WithLabelValues(handlerName, "400").Inc()
-		http.Error(w, "UID заказа не указан", http.StatusBadRequest)
+		respondWithError(w, http.StatusBadRequest, "UID заказа не указан", handlerName)
 		return
 	}
 
-	// Поиск в кэше. Передаем контекст (r.Context()) для трейсинга.
+	// 1. Поиск в кэше. Передаем контекст (r.Context()) для трейсинга.
 	if order, found := h.cache.Get(r.Context(), orderUID); found {
 		log.Printf("КЭШ ХИТ: %s", orderUID)
 		metrics.CacheHits.Inc()
@@ -47,7 +46,7 @@ func (h *OrderHandler) GetByUID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Поиск в БД
+	// 2. Поиск в БД
 	log.Printf("КЭШ ПРОМАХ: %s. Запрос к БД.", orderUID)
 	metrics.CacheMisses.Inc()
 
@@ -56,12 +55,11 @@ func (h *OrderHandler) GetByUID(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		log.Printf("Ошибка получения заказа из БД: %v", err)
 		metrics.DBErrors.WithLabelValues("get_order").Inc()
-		metrics.HttpRequestsTotal.WithLabelValues(handlerName, "404").Inc()
-		http.Error(w, "Заказ не найден", http.StatusNotFound)
+		respondWithError(w, http.StatusNotFound, "Заказ не найден", handlerName)
 		return
 	}
 
-	// Сохранение в кэш. Передаем контекст.
+	// 3. Сохранение в кэш. Передаем контекст.
 	h.cache.Set(r.Context(), orderUID, order)
 	log.Printf("Заказ %s добавлен в кэш.", orderUID)
 
@@ -71,12 +69,19 @@ func (h *OrderHandler) GetByUID(w http.ResponseWriter, r *http.Request) {
 
 // respondWithJSON вспомогательная функция для отправки JSON-ответов.
 func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
-	response, _ := json.Marshal(payload)
+	response, err := json.Marshal(payload)
+	if err != nil {
+		log.Printf("Ошибка сериализации JSON: %v", err)
+		http.Error(w, "Внутренняя ошибка сервера", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
 	w.Write(response)
 }
 
+// respondWithError вспомогательная функция для отправки ошибок и регистрации метрик.
 func respondWithError(w http.ResponseWriter, code int, message string, handlerName string) {
 	metrics.HttpRequestsTotal.WithLabelValues(handlerName, strconv.Itoa(code)).Inc()
 	http.Error(w, message, code)

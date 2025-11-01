@@ -28,7 +28,7 @@ func InitTracerProvider(serviceName string) func() {
 	// Ресурс (описание сервиса)
 	res := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		serviceName(serviceName), // Имя сервиса
+		semconv.ServiceNameKey.String(serviceName), // Имя сервиса
 	)
 
 	// Провайдер трассировки
