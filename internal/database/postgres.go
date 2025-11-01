@@ -1,9 +1,10 @@
 package database
 
 import (
-	"L0_project/internal/metrics" // Для сбора метрик
+	"L0_project/internal/metrics"
 	"L0_project/internal/model"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"log"
@@ -13,7 +14,7 @@ import (
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
-	"go.opentelemetry.io/otel" // Для трассировки
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -24,7 +25,7 @@ type Storage interface {
 	SaveOrder(ctx context.Context, order *model.Order) error
 	GetOrderByUID(ctx context.Context, orderUID string) (*model.Order, error)
 	GetAllOrders(ctx context.Context) ([]model.Order, error)
-	Close()
+	Close() error
 }
 
 // postgresStorage обеспечивает взаимодействие с базой данных PostgreSQL.
@@ -82,7 +83,7 @@ func runMigrations(dbURL, migrationsPath string) error {
 }
 
 // SaveOrder сохраняет заказ и все связанные с ним данные в одной транзакции.
-func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) error {
+func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) (err error) {
 	// Создаем span для трассировки
 	ctx, span := s.tracer.Start(ctx, "DB.SaveOrder")
 	defer span.End()
@@ -91,33 +92,50 @@ func (s *postgresStorage) SaveOrder(ctx context.Context, order *model.Order) err
 	if err != nil {
 		return fmt.Errorf("ошибка начала транзакции: %w", err)
 	}
-	defer tx.Rollback() // Безопасный Rollback, если Commit не был вызван
+
+	// Используем defer с функцией, чтобы корректно обработать panic и ошибки
+	defer func() {
+		if p := recover(); p != nil {
+			// Если была паника, откатываем
+			_ = tx.Rollback()
+			panic(p) // Восстанавливаем панику
+		} else if err != nil {
+			// Если функция завершилась с ошибкой, откатываем
+			// Логгируем ошибку отката, если она не sql.ErrTxDone
+			if rbErr := tx.Rollback(); rbErr != nil && !errors.Is(rbErr, sql.ErrTxDone) {
+				log.Printf("Ошибка отката транзакции (после ошибки: %v): %v", err, rbErr)
+			}
+		}
+	}()
 
 	deliveryQuery := `INSERT INTO deliveries (name, phone, zip, city, address, region, email) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`
 	var deliveryID int
-	if err := tx.GetContext(ctx, &deliveryID, deliveryQuery, order.Delivery.Name, order.Delivery.Phone, order.Delivery.Zip, order.Delivery.City, order.Delivery.Address, order.Delivery.Region, order.Delivery.Email); err != nil {
+	// Присваиваем ошибку именованной err
+	if err = tx.GetContext(ctx, &deliveryID, deliveryQuery, order.Delivery.Name, order.Delivery.Phone, order.Delivery.Zip, order.Delivery.City, order.Delivery.Address, order.Delivery.Region, order.Delivery.Email); err != nil {
 		return fmt.Errorf("ошибка сохранения доставки: %w", err)
 	}
 
 	paymentQuery := `INSERT INTO payments (transaction, request_id, currency, provider, amount, payment_dt, bank, delivery_cost, goods_total, custom_fee) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`
 	var paymentID int
-	if err := tx.GetContext(ctx, &paymentID, paymentQuery, order.Payment.Transaction, order.Payment.RequestID, order.Payment.Currency, order.Payment.Provider, order.Payment.Amount, order.Payment.PaymentDt, order.Payment.Bank, order.Payment.DeliveryCost, order.Payment.GoodsTotal, order.Payment.CustomFee); err != nil {
+	if err = tx.GetContext(ctx, &paymentID, paymentQuery, order.Payment.Transaction, order.Payment.RequestID, order.Payment.Currency, order.Payment.Provider, order.Payment.Amount, order.Payment.PaymentDt, order.Payment.Bank, order.Payment.DeliveryCost, order.Payment.GoodsTotal, order.Payment.CustomFee); err != nil {
 		return fmt.Errorf("ошибка сохранения платежа: %w", err)
 	}
 
 	orderQuery := `INSERT INTO orders (order_uid, track_number, entry, delivery_id, payment_id, locale, internal_signature, customer_id, delivery_service, shardkey, sm_id, date_created, oof_shard) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`
-	if _, err := tx.ExecContext(ctx, orderQuery, order.OrderUID, order.TrackNumber, order.Entry, deliveryID, paymentID, order.Locale, order.InternalSignature, order.CustomerID, order.DeliveryService, order.Shardkey, order.SmID, order.DateCreated, order.OofShard); err != nil {
+	if _, err = tx.ExecContext(ctx, orderQuery, order.OrderUID, order.TrackNumber, order.Entry, deliveryID, paymentID, order.Locale, order.InternalSignature, order.CustomerID, order.DeliveryService, order.Shardkey, order.SmID, order.DateCreated, order.OofShard); err != nil {
 		return fmt.Errorf("ошибка сохранения заказа: %w", err)
 	}
 
 	for _, item := range order.Items {
 		itemQuery := `INSERT INTO items (order_uid, chrt_id, track_number, price, rid, name, sale, size, total_price, nm_id, brand, status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
-		if _, err := tx.ExecContext(ctx, itemQuery, order.OrderUID, item.ChrtID, item.TrackNumber, item.Price, item.Rid, item.Name, item.Sale, item.Size, item.TotalPrice, item.NmID, item.Brand, item.Status); err != nil {
+		if _, err = tx.ExecContext(ctx, itemQuery, order.OrderUID, item.ChrtID, item.TrackNumber, item.Price, item.Rid, item.Name, item.Sale, item.Size, item.TotalPrice, item.NmID, item.Brand, item.Status); err != nil {
 			return fmt.Errorf("ошибка сохранения товара: %w", err)
 		}
 	}
 
-	return tx.Commit()
+	// Если все успешно, коммитим. Ошибка (nil или реальная) будет возвращена.
+	err = tx.Commit()
+	return err
 }
 
 // GetOrderByUID извлекает полный объект заказа по его UID.
@@ -214,6 +232,6 @@ func (s *postgresStorage) GetAllOrders(ctx context.Context) ([]model.Order, erro
 }
 
 // Close закрывает соединение с БД.
-func (s *postgresStorage) Close() {
-	s.db.Close()
+func (s *postgresStorage) Close() error {
+	return s.db.Close()
 }

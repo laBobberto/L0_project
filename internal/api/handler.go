@@ -78,7 +78,9 @@ func respondWithJSON(w http.ResponseWriter, code int, payload interface{}) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	w.Write(response)
+	if _, err := w.Write(response); err != nil {
+		log.Printf("Ошибка записи HTTP-ответа: %v", err)
+	}
 }
 
 // respondWithError вспомогательная функция для отправки ошибок и регистрации метрик.

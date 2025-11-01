@@ -58,7 +58,7 @@ func TestOrderHandler_GetByUID_CacheHit(t *testing.T) {
 	req := createTestRequest(t, uid)
 
 	// Ожидаем вызов кэша
-	mockCache.EXPECT().Get(uid).Return(helperTestOrder, true)
+	mockCache.EXPECT().Get(gomock.Any(), uid).Return(helperTestOrder, true)
 	// Не ожидаем вызова БД
 	mockStorage.EXPECT().GetOrderByUID(gomock.Any(), gomock.Any()).Times(0)
 
@@ -82,11 +82,11 @@ func TestOrderHandler_GetByUID_CacheMiss_DBHit(t *testing.T) {
 	req := createTestRequest(t, uid)
 
 	// 1. Ожидаем промах кэша
-	mockCache.EXPECT().Get(uid).Return(nil, false)
+	mockCache.EXPECT().Get(gomock.Any(), uid).Return(nil, false)
 	// 2. Ожидаем запрос к БД
 	mockStorage.EXPECT().GetOrderByUID(gomock.Any(), uid).Return(helperTestOrder, nil)
 	// 3. Ожидаем сохранение в кэш
-	mockCache.EXPECT().Set(uid, helperTestOrder).Times(1)
+	mockCache.EXPECT().Set(gomock.Any(), uid, helperTestOrder).Times(1)
 
 	handler.GetByUID(rr, req)
 
@@ -108,11 +108,11 @@ func TestOrderHandler_GetByUID_NotFound(t *testing.T) {
 	req := createTestRequest(t, uid)
 
 	// 1. Ожидаем промах кэша
-	mockCache.EXPECT().Get(uid).Return(nil, false)
+	mockCache.EXPECT().Get(gomock.Any(), uid).Return(nil, false)
 	// 2. Ожидаем запрос к БД, который вернет ошибку
 	mockStorage.EXPECT().GetOrderByUID(gomock.Any(), uid).Return(nil, errors.New("not found"))
 	// 3. Не ожидаем вызова Set в кэш
-	mockCache.EXPECT().Set(gomock.Any(), gomock.Any()).Times(0)
+	mockCache.EXPECT().Set(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 
 	handler.GetByUID(rr, req)
 
@@ -121,11 +121,20 @@ func TestOrderHandler_GetByUID_NotFound(t *testing.T) {
 }
 
 func TestOrderHandler_GetByUID_NoUID(t *testing.T) {
-	_, handler, _, _ := setupHandlerAndMocks(t)
+	ctrl, handler, mockCache, mockStorage := setupHandlerAndMocks(t)
+	defer ctrl.Finish()
 
 	// Создаем запрос без chi-контекста
 	req := httptest.NewRequest("GET", "/api/order/", nil)
+	// Важно: создаем пустой chi.RouteContext, чтобы chi.URLParam не паниковал
+	// (в реальном сервере chi.Mux всегда создает его)
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, chi.NewRouteContext()))
+
 	rr := httptest.NewRecorder()
+
+	// Не ожидаем вызовов
+	mockCache.EXPECT().Get(gomock.Any(), gomock.Any()).Times(0)
+	mockStorage.EXPECT().GetOrderByUID(gomock.Any(), gomock.Any()).Times(0)
 
 	handler.GetByUID(rr, req)
 
